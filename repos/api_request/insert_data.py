@@ -19,9 +19,8 @@ def connect_database():
         print(f"Database connection failed: {e}")
         
 #function for creating table if not exists
-def create_table():
+def create_table(conn):
     try:
-        conn=connect_database()
         print("creating table......")
         cur=conn.cursor()
         cur.execute('''
@@ -41,8 +40,40 @@ def create_table():
         
         conn.commit()
         print("table created successfully")
+        return cur
         
     except psycopg2.Error as e:
         print(f"Falied to create table : {e}")
         
-create_table()
+#create_table()
+
+#create function to insert data
+def insert_data(conn,data):
+    try:
+        print("Inserting weather data........")
+        cur=conn.cursor()
+        cur.execute('''insert into weatherstack.weather_data(city,temperature,weather_description,wind_speed,time,inserted_at,utc_offset) values(%s,%s,%s,%s,%s, NOW(),%s)''',
+                        (
+                            data['location']['name'],
+                            data['current']['temperature'],
+                            data['current']['weather_descriptions'][0],
+                            data['current']['wind_speed'],
+                            data['location']['localtime'],
+                            data['location']['utc_offset']
+                        )
+                    )
+        conn.commit()
+        print("Data inserted successfully")
+        
+    except psycopg2.Error as e:
+        print(f"Failed to insert data: {e}")
+        
+
+data=mock_fetch_data()
+conn=connect_database()
+
+if conn:
+    create_table(conn)
+    insert_data(conn, data)
+else:
+    print("Database connection failed. Stopping script.")
