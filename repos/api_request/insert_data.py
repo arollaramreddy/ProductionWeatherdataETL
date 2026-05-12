@@ -12,11 +12,37 @@ def connect_database():
             user="arollaramreddy",
             password="weather_db_password"
         )
-        
+        print("connection to database successfull")
         return conn
     
     except psycopg2.Error as e:
         print(f"Database connection failed: {e}")
         
-connect_database()
+#function for creating table if not exists
+def create_table():
+    try:
+        conn=connect_database()
+        print("creating table......")
+        cur=conn.cursor()
+        cur.execute('''
+                    create schema if not exists weatherstack;
+                    create table if not exists weatherstack.weather_data(
+                        id serial,
+                        city varchar(20),
+                        temperature float,
+                        weather_description text,
+                        wind_speed float,
+                        time Timestamp,
+                        inserted_at Timestamp default NOW(),
+                        utc_offset text,
+                        primary key(id)
+                    );
+                    ''')
         
+        conn.commit()
+        print("table created successfully")
+        
+    except psycopg2.Error as e:
+        print(f"Falied to create table : {e}")
+        
+create_table()
