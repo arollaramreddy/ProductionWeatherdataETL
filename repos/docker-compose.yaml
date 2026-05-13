@@ -29,6 +29,7 @@ services:
     volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./api_request:/opt/airflow/api_request
+    - /Users/ramreddy/.docker/run/docker.sock:/var/run/docker.sock
     depends_on:
     - database
     networks:
@@ -49,6 +50,55 @@ services:
     networks:
       - my_network
     command: run
+
+  redis:
+    container_name: redis_container
+    image: redis:7-alpine
+    networks:
+      - my_network
+
+  superset-init:
+    container_name: superset_init_container
+    build:
+      context: ./superset
+    environment:
+      SUPERSET_SECRET_KEY: change-this-to-a-long-random-production-secret
+      SUPERSET_METADATA_DB_URI: postgresql+psycopg2://superset:superset_password@database:5432/superset_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - database
+      - redis
+    networks:
+      - my_network
+    command: >
+      bash -c "superset db upgrade &&
+      superset fab create-admin --username admin --firstname Superset --lastname Admin --email admin@example.com --password admin || true &&
+      superset init"
+
+  superset:
+    container_name: superset_container
+    build:
+      context: ./superset
+    ports:
+      - 8088:8088
+    environment:
+      SUPERSET_SECRET_KEY: change-this-to-a-long-random-production-secret
+      SUPERSET_METADATA_DB_URI: postgresql+psycopg2://superset:superset_password@database:5432/superset_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      database:
+        condition: service_started
+      redis:
+        condition: service_started
+      superset-init:
+        condition: service_completed_successfully
+    networks:
+      - my_network
+    command: >
+      gunicorn --bind 0.0.0.0:8088 --workers 2 --worker-class gthread
+      --threads 8 --timeout 120 "superset.app:create_app()"
 
 
 

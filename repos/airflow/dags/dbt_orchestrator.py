@@ -2,18 +2,24 @@ import sys
 from datetime import datetime, timedelta
 
 from airflow.sdk import dag, task
+from airflow.providers.docker.operators.docker import DockerOperator
+from docker.types import Mount
 
 sys.path.append("/opt/airflow/api_request")
 from insert_data import main
 
+DBT_PROJECT_PATH = "/Users/ramreddy/Documents/github/production_learning/containarized ETL piepline/ProductionWeatherdataETL/repos/dbt/weather_project"
+DBT_PROFILES_PATH = "/Users/ramreddy/Documents/github/production_learning/containarized ETL piepline/ProductionWeatherdataETL/repos/dbt"
+
+
 default_args={
-    'description': 'A DAG to extract weather data and load it into Postgres',
+    'description': 'A DAG to orchestrate data',
     'start_date': datetime(2026, 5, 12),
     'catchup':False
 }
 
 @dag(
-    dag_id="extract_weather_data",
+    dag_id="dbt_orchestrator",
     default_args=default_args,
     schedule=timedelta(minutes=5)
 )
@@ -21,7 +27,23 @@ def extract_weather_data():
     @task
     def insert_weather_data():
         main()
-        
-    insert_weather_data()
+
+    transform_data = DockerOperator(
+        task_id="transform_data",
+        image="ghcr.io/dbt-labs/dbt-postgres:1.9.latest",
+        command="run",
+        working_dir="/usr/app",
+        mounts=[
+            Mount(source=DBT_PROJECT_PATH, target="/usr/app", type="bind"),
+            Mount(source=DBT_PROFILES_PATH, target="/root/.dbt", type="bind"),
+        ],
+        network_mode="repos_my_network",
+        docker_url="unix://var/run/docker.sock",
+        auto_remove="success",
+        mount_tmp_dir=False,
+    )
+    
+    
+    insert_weather_data() >> transform_data
 
 extract_weather_data()
