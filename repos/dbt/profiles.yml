@@ -1,0 +1,12 @@
+weather_project:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: database
+      user: arollaramreddy
+      password: weather_db_password
+      port: 5432
+      dbname: weather_db
+      schema: weatherstack
+      threads: 1

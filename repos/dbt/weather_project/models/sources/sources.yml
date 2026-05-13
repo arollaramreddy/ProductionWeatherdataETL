@@ -1,0 +1,18 @@
+version: 2
+
+sources:
+  - name: weatherstack
+    database: weather_db
+    schema: weatherstack
+    tables:
+      - name: weather_data
+        columns:
+          - name: id
+          - name: city
+          - name: temperature
+          - name: weather_description
+          - name: wind_speed
+          - name: time
+          - name: inserted_at
+          - name: utc_offset
+

@@ -21,14 +21,40 @@ services:
     - 8000:8080
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://ram_airflow:airflow_password@database:5432/airflow_db
+      DB_HOST: database
+      DB_PORT: 5432
+      DB_NAME: weather_db
+      DB_USER: arollaramreddy
+      DB_PASSWORD: weather_db_password
     volumes:
     - ./airflow/dags:/opt/airflow/dags
+    - ./api_request:/opt/airflow/api_request
     depends_on:
     - database
     networks:
     - my_network
     command: >
       bash -c "airflow db migrate && airflow standalone"
+
+  dbt:
+    container_name: dbt_container
+    image: ghcr.io/dbt-labs/dbt-postgres:1.9.latest
+    platform: linux/amd64
+    volumes:
+      - ./dbt/weather_project:/usr/app
+      - ./dbt:/root/.dbt
+    working_dir: /usr/app
+    depends_on:
+      - database
+    networks:
+      - my_network
+    command: run
+
+
+
+
+
+
 
 networks: 
   my_network:
