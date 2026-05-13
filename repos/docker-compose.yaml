@@ -27,8 +27,8 @@ services:
     - ${AIRFLOW_HOST_PORT:-8000}:8080
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@database:5432/${AIRFLOW_DB}
-      DB_HOST: ${APP_DB_HOST:-database}
-      DB_PORT: ${APP_DB_PORT:-5432}
+      DB_HOST: database
+      DB_PORT: 5432
       DB_NAME: ${POSTGRES_DB}
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
@@ -47,6 +47,12 @@ services:
     container_name: dbt_container
     image: ghcr.io/dbt-labs/dbt-postgres:1.9.latest
     platform: linux/amd64
+    environment:
+      DB_HOST: database
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ./dbt/weather_project:/usr/app
       - ./dbt:/root/.dbt

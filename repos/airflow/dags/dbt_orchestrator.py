@@ -1,4 +1,5 @@
 import sys
+import os
 from datetime import datetime, timedelta
 
 from airflow.sdk import dag, task
@@ -41,6 +42,13 @@ def extract_weather_data():
         docker_url="unix://var/run/docker.sock",
         auto_remove="success",
         mount_tmp_dir=False,
+        environment={
+            "DB_HOST": "database",
+            "DB_PORT": "5432",
+            "DB_NAME": os.environ["DB_NAME"],
+            "DB_USER": os.environ["DB_USER"],
+            "DB_PASSWORD": os.environ["DB_PASSWORD"],
+        },
     )
     
     

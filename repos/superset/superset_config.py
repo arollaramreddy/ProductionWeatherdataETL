@@ -2,10 +2,7 @@ import os
 
 SECRET_KEY = os.environ["SUPERSET_SECRET_KEY"]
 
-SQLALCHEMY_DATABASE_URI = os.getenv(
-    "SUPERSET_METADATA_DB_URI",
-    "postgresql+psycopg2://superset:superset_password@database:5432/superset_db",
-)
+SQLALCHEMY_DATABASE_URI = os.environ["SUPERSET_METADATA_DB_URI"]
 
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
