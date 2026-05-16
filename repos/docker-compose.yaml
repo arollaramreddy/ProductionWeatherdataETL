@@ -3,14 +3,20 @@ services:
     container_name: postgres_container
     image: postgres:17
     ports:
-    - 5001:5432
+    - ${POSTGRES_HOST_PORT:-5001}:5432
     environment:
-      POSTGRES_DB: weather_db
-      POSTGRES_USER: arollaramreddy
-      POSTGRES_PASSWORD: weather_db_password
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      AIRFLOW_DB: ${AIRFLOW_DB}
+      AIRFLOW_DB_USER: ${AIRFLOW_DB_USER}
+      AIRFLOW_DB_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+      SUPERSET_DB: ${SUPERSET_DB}
+      SUPERSET_DB_USER: ${SUPERSET_DB_USER}
+      SUPERSET_DB_PASSWORD: ${SUPERSET_DB_PASSWORD}
     volumes:
     - ./postgres/data:/var/lib/postgresql/data
-    - ./postgres/airflow_init.sql:/docker-entrypoint-initdb.d/airflow_init.sql
+    - ./postgres/init_metadata.sh:/docker-entrypoint-initdb.d/init_metadata.sh
     networks:
     - my_network
 
@@ -18,17 +24,18 @@ services:
     container_name: airflow_container
     image: apache/airflow:3.0.0
     ports:
-    - 8000:8080
+    - ${AIRFLOW_HOST_PORT:-8000}:8080
     environment:
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://ram_airflow:airflow_password@database:5432/airflow_db
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@database:5432/${AIRFLOW_DB}
       DB_HOST: database
       DB_PORT: 5432
-      DB_NAME: weather_db
-      DB_USER: arollaramreddy
-      DB_PASSWORD: weather_db_password
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./api_request:/opt/airflow/api_request
+    - /Users/ramreddy/.docker/run/docker.sock:/var/run/docker.sock
     depends_on:
     - database
     networks:
@@ -40,6 +47,12 @@ services:
     container_name: dbt_container
     image: ghcr.io/dbt-labs/dbt-postgres:1.9.latest
     platform: linux/amd64
+    environment:
+      DB_HOST: database
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ./dbt/weather_project:/usr/app
       - ./dbt:/root/.dbt
@@ -49,6 +62,55 @@ services:
     networks:
       - my_network
     command: run
+
+  redis:
+    container_name: redis_container
+    image: redis:7-alpine
+    networks:
+      - my_network
+
+  superset-init:
+    container_name: superset_init_container
+    build:
+      context: ./superset
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      SUPERSET_METADATA_DB_URI: postgresql+psycopg2://${SUPERSET_DB_USER}:${SUPERSET_DB_PASSWORD}@database:5432/${SUPERSET_DB}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+    depends_on:
+      - database
+      - redis
+    networks:
+      - my_network
+    command: >
+      bash -c "superset db upgrade &&
+      superset fab create-admin --username ${SUPERSET_ADMIN_USERNAME} --firstname ${SUPERSET_ADMIN_FIRSTNAME:-Superset} --lastname ${SUPERSET_ADMIN_LASTNAME:-Admin} --email ${SUPERSET_ADMIN_EMAIL} --password ${SUPERSET_ADMIN_PASSWORD} || true &&
+      superset init"
+
+  superset:
+    container_name: superset_container
+    build:
+      context: ./superset
+    ports:
+      - ${SUPERSET_HOST_PORT:-8088}:8088
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      SUPERSET_METADATA_DB_URI: postgresql+psycopg2://${SUPERSET_DB_USER}:${SUPERSET_DB_PASSWORD}@database:5432/${SUPERSET_DB}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+    depends_on:
+      database:
+        condition: service_started
+      redis:
+        condition: service_started
+      superset-init:
+        condition: service_completed_successfully
+    networks:
+      - my_network
+    command: >
+      gunicorn --bind 0.0.0.0:8088 --workers 2 --worker-class gthread
+      --threads 8 --timeout 120 "superset.app:create_app()"
 
 
 
