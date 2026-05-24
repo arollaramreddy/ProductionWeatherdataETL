@@ -1,2 +1,10 @@
 .env
 repos/postgres/data/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+repos/dbt/logs/
+repos/dbt/target/
+repos/dbt/weather_project/target/
+repos/dbt/.user.yml

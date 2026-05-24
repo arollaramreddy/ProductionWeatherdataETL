@@ -1,115 +1,98 @@
 # ProductionWeatherdataETL
 
-Containerized weather data pipeline using Python, Postgres, Airflow, dbt, and Apache Superset.
+ProductionWeatherdataETL is a containerized data engineering project that ingests current weather data from the Weatherstack API, stores it in Postgres, transforms it with dbt, orchestrates the workflow with Airflow, and makes the modeled data available for analysis in Apache Superset.
 
-This project is a production-style data engineering stack. It extracts weather data from the Weatherstack API, loads it into Postgres, transforms it with dbt, orchestrates jobs with Airflow, and exposes the final tables for visualization in Superset.
+The project is built as a local, production-style ETL stack. It is useful for practicing the core patterns used in real data platforms: API ingestion, database loading, scheduled orchestration, SQL modeling, and dashboard-ready analytics tables.
+
+## What This Project Does
+
+1. Calls the Weatherstack API for current weather data.
+2. Loads each observation into a raw Postgres table.
+3. Uses dbt to build cleaned and aggregated analytics tables.
+4. Uses Airflow DAGs to schedule and orchestrate ingestion and transformation.
+5. Uses Superset as the BI layer for querying and dashboarding the final tables.
+
+The default API query is configured for New York in `repos/api_request/api_requests.py`. You can change the city by editing the Weatherstack query URL in that file.
 
 ## Architecture
 
-```text
-Weatherstack API
-      |
-      v
-Python ETL scripts
-      |
-      v
-Postgres database
-  - weatherstack.weather_data
-      |
-      v
-dbt transformations
-  - bronze
-  - silver/gold models
-      |
-      v
-Apache Superset dashboards
+```mermaid
+flowchart LR
+    A[Weatherstack API] --> B[Python ingestion scripts]
+    B --> C[(Postgres)]
+    C --> D[dbt silver model]
+    D --> E[dbt gold model]
+    E --> F[Apache Superset]
 
-Airflow orchestrates the ETL and dbt workflow.
-Docker Compose runs the local platform.
+    G[Apache Airflow] --> B
+    G --> D
+    H[Docker Compose] -. runs .-> C
+    H -. runs .-> G
+    H -. runs .-> F
 ```
 
-## Services
+### Data Flow
 
-The main Compose file is:
+| Layer | Component | Purpose |
+| --- | --- | --- |
+| Extract | `api_requests.py` | Calls Weatherstack and returns the API response as JSON. |
+| Load | `insert_data.py` | Creates the `weatherstack.weather_data` table and inserts weather observations. |
+| Store | Postgres | Stores raw weather rows plus metadata databases for Airflow and Superset. |
+| Transform | dbt | Builds clean `silver` and aggregated `gold` tables. |
+| Orchestrate | Airflow | Schedules Python ingestion and dbt transformation DAGs. |
+| Visualize | Superset | Connects to Postgres for SQL exploration, charts, and dashboards. |
 
-```text
-repos/docker-compose.yaml
-```
+## Tech Stack
 
-It defines these services:
+- Python for API ingestion and database loading
+- Postgres 17 for storage
+- Apache Airflow 3 for orchestration
+- dbt Postgres for SQL transformations
+- Apache Superset for dashboards
+- Redis for Superset caching
+- Docker Compose for local infrastructure
 
-```text
-database       Postgres 17 database for weather data, Airflow metadata, and Superset metadata
-airflow        Airflow 3 standalone instance for orchestration
-dbt            dbt Postgres container for transformations
-redis          Redis cache used by Superset
-superset-init  One-time Superset metadata migration/admin initialization
-superset       Superset web application for visualization
-```
-
-Default ports:
-
-```text
-Postgres:  localhost:5001 -> container:5432
-Airflow:   http://localhost:8000
-Superset:  http://localhost:8088
-```
-
-## Project Structure
+## Repository Structure
 
 ```text
-repos/
-  api_request/
-    api_requests.py       Fetches weather data
-    insert_data.py        Creates table and inserts weather data into Postgres
-
-  airflow/
-    dags/
-      orchestrator.py       Airflow DAG for Python ETL
-      dbt_orchestrator.py   Airflow DAG for dbt transformations
-
-  dbt/
-    profiles.yml
-    weather_project/
-      dbt_project.yml
-      models/
-        sources/
-          sources.yml
-        bronze/
-          bronze.sql
-        gold/
-          gold.sql
-
-  postgres/
-    init_metadata.sh      Creates Airflow and Superset metadata databases/users
-
-  superset/
-    Dockerfile
-    superset_config.py
-
-  docker-compose.yaml
+.
++-- README.md
++-- pyproject.toml
++-- main.py
++-- repos
+    +-- api_request
+    |   +-- api_requests.py
+    |   +-- insert_data.py
+    |   +-- .env.example
+    +-- airflow
+    |   +-- dags
+    |       +-- orchestrator.py
+    |       +-- dbt_orchestrator.py
+    +-- dbt
+    |   +-- profiles.yml
+    |   +-- weather_project
+    |       +-- dbt_project.yml
+    |       +-- models
+    |           +-- sources
+    |           |   +-- sources.yml
+    |           +-- silver
+    |           |   +-- silver.sql
+    |           +-- gold
+    |               +-- gold.sql
+    +-- postgres
+    |   +-- init_metadata.sh
+    +-- superset
+    |   +-- Dockerfile
+    |   +-- superset_config.py
+    +-- .env.example
+    +-- docker-compose.yaml
 ```
 
-## Important Concepts
+## Data Model
 
-### ETL
+### Raw Table
 
-ETL stands for Extract, Transform, Load.
-
-In this project:
-
-```text
-Extract:   Python fetches weather data from Weatherstack
-Load:      Python inserts raw data into Postgres
-Transform: dbt creates clean analytics models
-Visualize: Superset reads transformed tables
-```
-
-### Postgres
-
-Postgres stores the weather data and metadata for platform services.
-
-Main weather database:
+`insert_data.py` loads Weatherstack responses into:
 
 ```text
 database: weather_db
@@ -117,117 +100,95 @@ schema:   weatherstack
 table:    weather_data
 ```
 
-Inside Docker containers, the Postgres host is:
+Important columns:
 
-```text
-database
-```
+- `city`
+- `temperature`
+- `weather_description`
+- `wind_speed`
+- `time`
+- `inserted_at`
+- `utc_offset`
 
-From your laptop, the Postgres host is:
+### dbt Models
 
-```text
-localhost
-```
-
-with port:
-
-```text
-5001
-```
-
-### Airflow
-
-Airflow schedules and orchestrates the pipeline. It controls the order of tasks such as:
-
-```text
-insert weather data -> run dbt transformations
-```
-
-The current setup uses `airflow standalone`, which is good for local development. In production, Airflow is usually split into webserver, scheduler, workers, triggerer, and metadata database services.
-
-### dbt
-
-dbt manages SQL transformations. It reads source data from Postgres and creates modeled tables.
-
-Example source:
-
-```text
-weatherstack.weather_data
-```
-
-Example model:
-
-```text
-weatherstack.bronze
-```
-
-dbt config files:
-
-```text
-repos/dbt/profiles.yml
-repos/dbt/weather_project/dbt_project.yml
-repos/dbt/weather_project/models/sources/sources.yml
-```
-
-### Superset
-
-Superset is the BI and visualization layer. It connects to Postgres and allows dashboards, charts, SQL exploration, and reporting.
-
-Superset app:
-
-```text
-http://localhost:8088
-```
-
-Default local login from `repos/.env`:
-
-```text
-username: admin
-password: admin
-```
-
-For real production, change these credentials and the `SUPERSET_SECRET_KEY` in your real `.env` file.
+| Model | Materialization | Description |
+| --- | --- | --- |
+| `silver` | table | Deduplicates weather rows by observation time and prepares local timestamps. |
+| `gold` | table | Aggregates daily average temperature and wind speed by city. |
 
 ## Prerequisites
 
-Install:
+Install these before running the project:
 
-```text
-Docker Desktop
-Docker Compose
-Python 3.12 or later, optional for local script execution
-```
+- Docker Desktop
+- Docker Compose
+- Git
+- A Weatherstack API key
+- Python 3.13 or later, optional for running the Python scripts directly from your host machine
 
-Create the platform environment file:
+## Configuration
+
+Create the main Docker Compose environment file:
 
 ```bash
 cd repos
 cp .env.example .env
 ```
 
-Then edit `repos/.env` and set real local secrets/passwords.
+Edit `repos/.env` and replace the placeholder values:
 
-Create your Weatherstack API key file:
+```env
+POSTGRES_HOST_PORT=5001
+POSTGRES_DB=weather_db
+POSTGRES_USER=your_postgres_user
+POSTGRES_PASSWORD=change_me_postgres_password
 
-```text
-repos/api_request/.env
+AIRFLOW_HOST_PORT=8000
+AIRFLOW_DB=airflow_db
+AIRFLOW_DB_USER=your_airflow_db_user
+AIRFLOW_DB_PASSWORD=change_me_airflow_db_password
+
+SUPERSET_HOST_PORT=8088
+SUPERSET_DB=superset_db
+SUPERSET_DB_USER=your_superset_db_user
+SUPERSET_DB_PASSWORD=change_me_superset_db_password
+SUPERSET_SECRET_KEY=change_me_to_a_long_random_secret_key
+SUPERSET_ADMIN_USERNAME=admin
+SUPERSET_ADMIN_PASSWORD=change_me_superset_admin_password
+SUPERSET_ADMIN_EMAIL=admin@example.com
 ```
 
-You can start from the example file:
+Create the Weatherstack API environment file:
 
 ```bash
-cp repos/api_request/.env.example repos/api_request/.env
+cp api_request/.env.example api_request/.env
 ```
 
-Example:
+Edit `repos/api_request/.env`:
 
 ```env
 API_KEY=your_weatherstack_api_key
 ```
 
-Do not commit `.env` files to Git.
+For the Airflow DAG that runs dbt through Docker, set absolute host paths in `repos/.env`:
 
-## How To Run
+```env
+DOCKER_SOCK=/var/run/docker.sock
+DBT_PROJECT_HOST_PATH=/absolute/path/to/ProductionWeatherdataETL/repos/dbt/weather_project
+DBT_PROFILES_HOST_PATH=/absolute/path/to/ProductionWeatherdataETL/repos/dbt
+DBT_DOCKER_NETWORK=repos_my_network
+```
+
+On some macOS Docker Desktop setups, the Docker socket may be:
+
+```env
+DOCKER_SOCK=/Users/your_username/.docker/run/docker.sock
+```
+
+Do not commit real `.env` files or API keys.
+
+## How To Run Locally
 
 From the repository root:
 
@@ -236,11 +197,23 @@ cd repos
 docker compose up -d --build
 ```
 
-Check services:
+Check the containers:
 
 ```bash
 docker compose ps
 ```
+
+Open the local services:
+
+| Service | URL |
+| --- | --- |
+| Airflow | http://localhost:8000 |
+| Superset | http://localhost:8088 |
+| Postgres | localhost:5001 |
+
+The `dbt` service in Docker Compose runs once and exits after executing `dbt run`. Use the manual dbt commands below whenever you want to rerun transformations.
+
+## Run The Pipeline With Airflow
 
 Open Airflow:
 
@@ -248,121 +221,139 @@ Open Airflow:
 http://localhost:8000
 ```
 
-Open Superset:
+The project includes two DAGs:
 
-```text
-http://localhost:8088
+| DAG | Purpose |
+| --- | --- |
+| `extract_weather_data` | Runs the Python ingestion script every 5 minutes. |
+| `dbt_orchestrator` | Runs ingestion first, then executes dbt in a Docker container. |
+
+If Airflow asks for a login, check the Airflow container logs. `airflow standalone` prints the generated local admin credentials during startup:
+
+```bash
+docker compose logs airflow
 ```
 
-## Running The Python ETL Manually
+## Run The Python ETL Manually
 
-Start Postgres:
+Start the database:
 
 ```bash
 cd repos
 docker compose up -d database
 ```
 
-Run the insert script from the API folder:
+From the repository root, run the insert script with uv:
 
 ```bash
-cd api_request
-python insert_data.py
+uv run python repos/api_request/insert_data.py
 ```
 
-This creates the schema/table if needed and inserts weather data.
+Or run the script from inside the Airflow container after the stack is up:
 
-## Running dbt Manually
+```bash
+cd repos
+docker compose exec airflow python /opt/airflow/api_request/insert_data.py
+```
+
+## Run dbt Manually
 
 From `repos/`:
 
 ```bash
 docker compose run --rm dbt debug
-```
-
-Run all dbt models:
-
-```bash
 docker compose run --rm dbt run
 ```
 
-Run only the bronze model:
+Run a specific model:
 
 ```bash
-docker compose run --rm dbt run --select bronze
+docker compose run --rm dbt run --select silver
+docker compose run --rm dbt run --select gold
 ```
 
-## Checking Postgres
+## Query Postgres
 
 Open a Postgres shell:
 
 ```bash
-docker exec -it postgres_container psql -U arollaramreddy -d weather_db
+docker exec -it postgres_container psql -U <POSTGRES_USER> -d <POSTGRES_DB>
 ```
 
-List tables:
+List weather tables:
 
 ```sql
 \dt weatherstack.*
 ```
 
-Query raw data:
+Query raw weather data:
 
 ```sql
-select * from weatherstack.weather_data;
+select * from weatherstack.weather_data order by inserted_at desc;
 ```
 
-Query dbt model:
+Query the dbt gold model:
 
 ```sql
-select * from weatherstack.bronze;
+select * from weatherstack.gold;
 ```
 
-Exit:
+Exit psql:
 
 ```sql
 \q
 ```
 
-## Connecting Superset To Weather Data
+## Connect Superset To Postgres
 
-Superset uses its own metadata database, but you still need to add `weather_db` as an analytics database inside the Superset UI.
+Open Superset:
 
-In Superset:
+```text
+http://localhost:8088
+```
+
+Log in with the values from `repos/.env`:
+
+```text
+username: SUPERSET_ADMIN_USERNAME
+password: SUPERSET_ADMIN_PASSWORD
+```
+
+Add a database connection:
 
 ```text
 Settings -> Database Connections -> + Database
 ```
 
-Use:
+Use these connection settings:
 
 ```text
 Database type: PostgreSQL
 Host: database
 Port: 5432
 Database: weather_db
-Username: value of POSTGRES_USER from repos/.env
-Password: value of POSTGRES_PASSWORD from repos/.env
+Username: value of POSTGRES_USER
+Password: value of POSTGRES_PASSWORD
 ```
 
-SQLAlchemy URI:
+SQLAlchemy URI format:
 
 ```text
 postgresql+psycopg2://<POSTGRES_USER>:<POSTGRES_PASSWORD>@database:5432/<POSTGRES_DB>
 ```
 
-Then add datasets from:
+Then add datasets from the `weatherstack` schema:
 
-```text
-schema: weatherstack
-tables: weather_data, bronze, gold
-```
+- `weather_data`
+- `silver`
+- `gold`
 
 ## Common Commands
 
 Start everything:
 
 ```bash
+cd repos
 docker compose up -d --build
 ```
 
@@ -380,181 +371,67 @@ docker compose logs -f database
 docker compose logs -f superset
 ```
 
-Remove orphan containers:
+Rerun dbt:
 
 ```bash
-docker compose down --remove-orphans
+docker compose run --rm dbt run
 ```
 
-Run dbt and remove one-off containers:
+Check running containers:
 
 ```bash
-docker compose run --rm --remove-orphans dbt run
+docker compose ps
 ```
+
+## Troubleshooting
+
+### Weatherstack API returns an error
+
+Check that `repos/api_request/.env` exists and contains a valid key:
+
+```env
+API_KEY=your_weatherstack_api_key
+```
+
+### dbt_orchestrator fails with a mount or path error
+
+Check the absolute paths in `repos/.env`:
+
+```env
+DBT_PROJECT_HOST_PATH=/absolute/path/to/ProductionWeatherdataETL/repos/dbt/weather_project
+DBT_PROFILES_HOST_PATH=/absolute/path/to/ProductionWeatherdataETL/repos/dbt
+```
+
+These must be host machine paths because Airflow asks Docker to mount the dbt project into a dbt container.
+
+### Docker socket is not found
+
+Update `DOCKER_SOCK` in `repos/.env`.
+
+Common values:
+
+```env
+DOCKER_SOCK=/var/run/docker.sock
+DOCKER_SOCK=/Users/your_username/.docker/run/docker.sock
+```
+
+### Environment changes do not apply to Postgres
+
+The Postgres data directory is persisted at `repos/postgres/data`. Database users and metadata databases are initialized only when the data directory is empty. If this is a local-only environment and you are okay losing local database data, stop the stack and remove that local data directory before starting again.
 
 ## Production Readiness Notes
 
-This repository is a strong local production-style prototype, but Docker Compose is not a full production deployment strategy.
+This project is designed as a local production-style learning environment. For real production deployment, the same architecture would usually add:
 
-For production, the same architecture would usually be deployed with:
+- Managed Postgres, Snowflake, BigQuery, Redshift, or Databricks for analytics storage
+- A secrets manager instead of `.env` files
+- Separate Airflow webserver, scheduler, worker, and triggerer services
+- Centralized logs, metrics, and alerts
+- CI/CD for tests and deployments
+- Backups and recovery plans
+- HTTPS, authentication, and role-based access control
+- Container orchestration with Kubernetes, ECS, or another production runtime
 
-```text
-Kubernetes or ECS
-Managed Postgres or cloud warehouse
-Secret manager
-CI/CD pipeline
-Centralized logs and metrics
-Alerting
-Backups
-TLS/HTTPS
-Role-based access control
-```
+## License
 
-## What Would Change In Production
-
-### Deployment
-
-Local:
-
-```text
-Docker Compose
-```
-
-Production:
-
-```text
-Kubernetes manifests or Helm charts
-Separate deployments for Airflow webserver, scheduler, workers, Superset, Redis
-Ingress controller and HTTPS
-```
-
-### Secrets
-
-Local:
-
-```text
-.env files and Compose environment variables
-```
-
-Production:
-
-```text
-Kubernetes Secrets
-AWS Secrets Manager
-GCP Secret Manager
-HashiCorp Vault
-```
-
-### Database
-
-Local:
-
-```text
-Postgres container
-```
-
-Production:
-
-```text
-Managed Postgres for metadata
-Snowflake, BigQuery, Redshift, Databricks, or managed Postgres for analytics
-Automated backups
-Read replicas if needed
-```
-
-### Airflow
-
-Local:
-
-```text
-airflow standalone
-```
-
-Production:
-
-```text
-Airflow webserver
-Airflow scheduler
-Airflow workers
-Airflow triggerer
-Remote logs
-Retry policies
-Alerts
-```
-
-### Superset
-
-Local:
-
-```text
-Single Superset web container
-Postgres metadata DB
-Redis cache
-```
-
-Production:
-
-```text
-Multiple Superset web workers
-Celery workers
-Celery beat
-Redis
-Postgres metadata DB
-SSO/OAuth
-HTTPS
-Backups
-```
-
-### dbt
-
-Local:
-
-```text
-Manual dbt container runs or Airflow DockerOperator
-```
-
-Production:
-
-```text
-Airflow KubernetesPodOperator
-dbt Cloud
-CI checks for dbt compile/test
-dbt docs generated and published
-```
-
-## Future Development
-
-Planned improvements:
-
-```text
-Add dbt tests for not_null, unique, accepted_values, and relationships
-Add dbt freshness checks for source weather data
-Add silver and gold models for analytics-ready reporting
-Add incremental dbt models for larger datasets
-Add Airflow retries and failure alerts
-Add Slack/email notifications
-Add CI/CD for linting, tests, Docker builds, and deployment
-Move credentials to a secret manager
-Add Kubernetes manifests or Helm charts
-Add Superset dashboards as importable assets
-Add monitoring with Prometheus and Grafana
-Add data quality checks with Great Expectations or Soda
-Add API extraction for multiple cities
-Add historical weather ingestion
-Add partitioning/indexing strategy in Postgres
-```
-
-## Current Status
-
-The project currently supports:
-
-```text
-Python ETL into Postgres
-Postgres storage
-dbt transformations
-Airflow orchestration
-Superset visualization service
-Containerized local runtime
-```
-
-This is a good foundation for a production data engineering portfolio project.
+Add a license before sharing or reusing this project publicly.

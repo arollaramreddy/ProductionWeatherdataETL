@@ -9,8 +9,15 @@ from docker.types import Mount
 sys.path.append("/opt/airflow/api_request")
 from insert_data import main
 
-DBT_PROJECT_PATH = "/Users/ramreddy/Documents/github/production_learning/containarized ETL piepline/ProductionWeatherdataETL/repos/dbt/weather_project"
-DBT_PROFILES_PATH = "/Users/ramreddy/Documents/github/production_learning/containarized ETL piepline/ProductionWeatherdataETL/repos/dbt"
+DBT_PROJECT_PATH = (
+    os.environ.get("DBT_PROJECT_HOST_PATH")
+    or "/absolute/path/to/ProductionWeatherdataETL/repos/dbt/weather_project"
+)
+DBT_PROFILES_PATH = (
+    os.environ.get("DBT_PROFILES_HOST_PATH")
+    or "/absolute/path/to/ProductionWeatherdataETL/repos/dbt"
+)
+DBT_DOCKER_NETWORK = os.environ.get("DBT_DOCKER_NETWORK") or "repos_my_network"
 
 
 default_args={
@@ -38,7 +45,7 @@ def extract_weather_data():
             Mount(source=DBT_PROJECT_PATH, target="/usr/app", type="bind"),
             Mount(source=DBT_PROFILES_PATH, target="/root/.dbt", type="bind"),
         ],
-        network_mode="repos_my_network",
+        network_mode=DBT_DOCKER_NETWORK,
         docker_url="unix://var/run/docker.sock",
         auto_remove="success",
         mount_tmp_dir=False,
