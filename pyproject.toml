@@ -1,12 +1,12 @@
 [project]
 name = "productionweatherdataetl"
 version = "0.1.0"
-description = "Add your description here"
+description = "Containerized weather data ETL platform with Airflow, Postgres, dbt, and Superset."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "apache-airflow>=3.2.1",
-    "dotenv>=0.9.9",
+    "python-dotenv>=1.2.2",
     "psycopg2>=2.9.12",
     "requests>=2.34.0",
 ]
