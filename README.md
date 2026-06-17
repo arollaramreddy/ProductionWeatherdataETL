@@ -92,11 +92,10 @@ repos/
 
 ## Environment Setup
 
-Create the platform environment file:
+Create the Weatherstack API environment file:
 
 ```bash
-cd repos
-cp .env.example .env
+cp api_request/.env.example api_request/.env
 ```
 
 Edit `repos/.env` and set local passwords. The key values are:
@@ -118,7 +117,7 @@ cp api_request/.env.example api_request/.env
 Set:
 
 ```env
-API_KEY=your_weatherstack_api_key
+DOCKER_SOCK=/Users/your_username/.docker/run/docker.sock
 ```
 
 For a demo without a live API key, set this in `repos/.env`:
@@ -170,7 +169,7 @@ Both DAGs use `WEATHER_INGEST_INTERVAL_MINUTES` from `repos/.env` and default to
 
 ## Run Ingestion Manually
 
-Start Postgres:
+Start the database:
 
 ```bash
 cd repos
