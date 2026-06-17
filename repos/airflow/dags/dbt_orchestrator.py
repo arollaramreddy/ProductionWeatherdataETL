@@ -1,57 +1,46 @@
-import sys
 import os
+import sys
 from datetime import datetime, timedelta
 
+from airflow.providers.standard.operators.bash import BashOperator
 from airflow.sdk import dag, task
-from airflow.providers.docker.operators.docker import DockerOperator
-from docker.types import Mount
 
 sys.path.append("/opt/airflow/api_request")
 from insert_data import main
 
-DBT_PROJECT_PATH = "/Users/ramreddy/Documents/github/production_learning/containarized ETL piepline/ProductionWeatherdataETL/repos/dbt/weather_project"
-DBT_PROFILES_PATH = "/Users/ramreddy/Documents/github/production_learning/containarized ETL piepline/ProductionWeatherdataETL/repos/dbt"
+DBT_PROJECT_PATH = "/opt/airflow/dbt/weather_project"
+DBT_PROFILES_PATH = "/opt/airflow/dbt"
 
-
-default_args={
-    'description': 'A DAG to orchestrate data',
-    'start_date': datetime(2026, 5, 12),
-    'catchup':False
+default_args = {
+    "description": "Extract weather data and build dbt analytics models",
+    "retries": 2,
+    "retry_delay": timedelta(minutes=2),
 }
+
 
 @dag(
     dag_id="dbt_orchestrator",
     default_args=default_args,
-    schedule=timedelta(minutes=5)
+    start_date=datetime(2026, 5, 12),
+    schedule=timedelta(minutes=int(os.getenv("WEATHER_INGEST_INTERVAL_MINUTES", "5"))),
+    catchup=False,
+    tags=["weather", "dbt", "analytics"],
 )
-def extract_weather_data():
+def weather_analytics_pipeline():
     @task
     def insert_weather_data():
         main()
 
-    transform_data = DockerOperator(
-        task_id="transform_data",
-        image="ghcr.io/dbt-labs/dbt-postgres:1.9.latest",
-        command="run",
-        working_dir="/usr/app",
-        mounts=[
-            Mount(source=DBT_PROJECT_PATH, target="/usr/app", type="bind"),
-            Mount(source=DBT_PROFILES_PATH, target="/root/.dbt", type="bind"),
-        ],
-        network_mode="repos_my_network",
-        docker_url="unix://var/run/docker.sock",
-        auto_remove="success",
-        mount_tmp_dir=False,
-        environment={
-            "DB_HOST": "database",
-            "DB_PORT": "5432",
-            "DB_NAME": os.environ["DB_NAME"],
-            "DB_USER": os.environ["DB_USER"],
-            "DB_PASSWORD": os.environ["DB_PASSWORD"],
-        },
+    transform_weather_models = BashOperator(
+        task_id="transform_weather_models",
+        bash_command=(
+            f"dbt run --project-dir {DBT_PROJECT_PATH} "
+            f"--profiles-dir {DBT_PROFILES_PATH}"
+        ),
+        append_env=True,
     )
-    
-    
-    insert_weather_data() >> transform_data
 
-extract_weather_data()
+    insert_weather_data() >> transform_weather_models
+
+
+weather_analytics_pipeline()

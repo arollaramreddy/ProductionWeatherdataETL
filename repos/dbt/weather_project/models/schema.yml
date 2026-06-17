@@ -1,0 +1,32 @@
+version: 2
+
+models:
+  - name: silver
+    description: Cleaned and de-duplicated weather observations from Weatherstack.
+    columns:
+      - name: id
+        tests:
+          - not_null
+          - unique
+      - name: city
+        tests:
+          - not_null
+      - name: temperature
+        tests:
+          - not_null
+      - name: weather_time_local
+        tests:
+          - not_null
+
+  - name: gold
+    description: Daily city-level weather metrics for dashboarding.
+    columns:
+      - name: city
+        tests:
+          - not_null
+      - name: weather_date
+        tests:
+          - not_null
+      - name: observation_count
+        tests:
+          - not_null

@@ -1,2 +1,15 @@
+.DS_Store
+
 .env
+**/.env
+!.env.example
+**/.env.example
+
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
 repos/postgres/data/
+repos/dbt/logs/
+repos/dbt/weather_project/target/
+repos/dbt/weather_project/dbt_packages/
